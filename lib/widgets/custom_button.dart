@@ -6,11 +6,11 @@ class CustomButton extends StatelessWidget {
   final bool isHome;
 
   const CustomButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onTap,
     this.isHome = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

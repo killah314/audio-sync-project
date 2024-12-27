@@ -1,3 +1,14 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.2' // This is the correct version for your setup
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.20' // Ensure Kotlin plugin is aligned with your project
+    }
+}
+
 plugins {
     id "com.android.application"
     id "kotlin-android"
@@ -7,16 +18,15 @@ plugins {
 
 android {
     namespace = "com.example.audio_sync_prototype"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 34
+    ndkVersion "25.1.8937393"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
-
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = 17
     }
 
     defaultConfig {
@@ -37,8 +47,13 @@ android {
             signingConfig = signingConfigs.debug
         }
     }
+    
 }
 
 flutter {
     source = "../.."
 }
+
+
+
+

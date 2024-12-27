@@ -1,3 +1,4 @@
+import 'package:audio_sync_prototype/utils/socket_methods.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_sync_prototype/widgets/custom_button.dart';
 import 'package:audio_sync_prototype/widgets/custom_text_field.dart';
@@ -6,11 +7,22 @@ class CreateRoomScreen extends StatefulWidget {
   const CreateRoomScreen({super.key});
 
   @override
-  _CreateRoomScreenState createState() => _CreateRoomScreenState();
+  State<CreateRoomScreen> createState() => _CreateRoomScreenState();
 }
 
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final TextEditingController _nameController = TextEditingController();
+  final SocketMethods _socketMethods = SocketMethods();
+
+  @override
+  void initState() {
+    super.initState();
+    // Use addPostFrameCallback to ensure context is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _socketMethods.updatePartyListener(context);
+      _socketMethods.notCorrectPartyListener(context);
+    });
+  }
 
   @override
   void dispose() {
@@ -52,7 +64,8 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                 child: CustomButton(
                   text: 'Create',
                   onTap: () {
-                    // Create room logic
+                    // Call createParty when the button is tapped
+                    _socketMethods.createParty(_nameController.text);
                   },
                 ),
               ),
