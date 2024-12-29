@@ -119,4 +119,28 @@ class PartyStateProvider extends ChangeNotifier {
     _currentTrackPosition = newPosition;
     notifyListeners(); // Notify listeners about the position change
   }
+
+  void updateTrackState(int trackIndex, bool isPlaying) {
+    _currentTrackIndex = trackIndex;
+    _isPlaying = isPlaying;
+    notifyListeners();
+  }
+
+  // Method to sync track state across devices (to be triggered by Socket)
+  void syncTrackState(int trackIndex, bool isPlaying, Duration position) {
+    _currentTrackIndex = trackIndex;
+    _isPlaying = isPlaying;
+    _currentTrackPosition = position;
+    notifyListeners();
+  }
+
+  // Method to update the player information in the party state
+  void updatePlayerInfo(String socketID, Map<String, dynamic> updatedInfo) {
+    int playerIndex = _partyState.players
+        .indexWhere((player) => player['socketID'] == socketID);
+    if (playerIndex != -1) {
+      _partyState.players[playerIndex] = updatedInfo;
+      notifyListeners();
+    }
+  }
 }

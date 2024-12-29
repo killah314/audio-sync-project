@@ -1,6 +1,4 @@
 import 'dart:async';
-
-import 'package:audio_sync_prototype/providers/client_state_provider.dart';
 import 'package:audio_sync_prototype/providers/party_state_provider.dart';
 import 'package:audio_sync_prototype/utils/socket_client.dart';
 import 'package:audio_sync_prototype/utils/socket_methods.dart';
@@ -11,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class PartyScreen extends StatefulWidget {
   const PartyScreen({super.key});
@@ -24,36 +21,33 @@ class _PartyScreenState extends State<PartyScreen> {
   final SocketMethods _socketMethods = SocketMethods();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  String? _currentTrackUrl; // Tracks the currently playing URL
-  int selectedTab = 0; // 0: Players Tab, 1: Tracks Tab
+  String? _currentTrackUrl;
+  int selectedTab = 0;
   Timer? _positionUpdateTimer;
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
-  ////////////////////////////////////////////////////////////
   var playerMe = null;
   late PartyStateProvider? party;
-  //////////////////////////////////////////////////////////////
+
   @override
   void initState() {
     super.initState();
-    _socketMethods.updateTimer(context);
     _socketMethods.updateParty(context);
     _socketMethods.trackAddedListener(context);
-    ////////////////////////////////////////////////////////////
+    _socketMethods.trackUpdateListener(context); // Ensure listener is active
+
     party = Provider.of<PartyStateProvider>(context, listen: false);
     findPlayerMe(party!);
-    ////////////////////////////////////////////////////////////
 
     // Add listener for play/pause state changes
     _audioPlayer.playerStateStream.listen((state) {
       setState(() {
-        // Sync the play/pause state from the AudioPlayer to PartyStateProvider
-        Provider.of<PartyStateProvider>(context, listen: false).isPlaying =
-            state.playing;
+        Provider.of<PartyStateProvider>(context, listen: false).isPlaying = state
+            .playing; // Sync the play/pause state from AudioPlayer to PartyStateProvider
       });
     });
 
-    // Listen to position updates
+    // Listen to the audio player's position stream to update the slider position
     _audioPlayer.positionStream.listen((newPosition) {
       setState(() {
         position = newPosition;
@@ -63,13 +57,12 @@ class _PartyScreenState extends State<PartyScreen> {
           .updateTrackPosition(newPosition);
     });
 
-    // Listen to duration updates (track length)
+    // Ensure that the duration is set after loading the track
     _audioPlayer.durationStream.listen((newDuration) {
       setState(() {
         duration = newDuration ?? Duration.zero;
       });
     });
-    // Start the position update timer
     _startPositionUpdateTimer();
   }
 
@@ -104,6 +97,7 @@ class _PartyScreenState extends State<PartyScreen> {
     if (index >= 0 && index < tracks.length) {
       String trackUrl = tracks[index]['url'];
       String trackTitle = tracks[index]['title']; // Get the track title
+      String duration = tracks[index]['duration'];
 
       if (trackUrl.isEmpty) {
         print("Track URL is empty!");
@@ -111,14 +105,10 @@ class _PartyScreenState extends State<PartyScreen> {
       }
 
       // Print both the track title and URL
-      print("Playing track: $trackTitle - $trackUrl");
+      print("Playing track: $trackTitle - $trackUrl - $duration");
 
-      if (trackUrl.contains('youtube.com') || trackUrl.contains('youtu.be')) {
-        await _playYouTubeAudio(trackUrl);
-      } else {
-        await _audioPlayer.setUrl(trackUrl);
-        await _audioPlayer.play();
-      }
+      // Emit playTrack event to the server
+      _socketMethods.playTrack(trackUrl, party.partyState['id'], index);
 
       setState(() {
         party.setPlaying(true);
@@ -145,20 +135,11 @@ class _PartyScreenState extends State<PartyScreen> {
       Duration currentPosition = _audioPlayer.position;
 
       // Print both the track title and URL
-      print("Playing track: $trackTitle - $trackUrl at $currentPosition");
+      print("Resuming track: $trackTitle - $trackUrl at $currentPosition");
 
-      if (trackUrl.contains('youtube.com') || trackUrl.contains('youtu.be')) {
-        await _resumeYouTubeAudio(trackUrl, currentPosition);
-      } else {
-        if (_currentTrackUrl != trackUrl) {
-          await _audioPlayer.setUrl(trackUrl);
-          _currentTrackUrl = trackUrl;
-        }
-        if (!party.isPlaying) {
-          await _audioPlayer.seek(currentPosition);
-        }
-        await _audioPlayer.play();
-      }
+      // Emit resumeTrack event to the server
+      _socketMethods.resumeTrack(
+          trackUrl, party.partyState['id'], currentPosition);
 
       setState(() {
         party.setPlaying(true);
@@ -169,67 +150,6 @@ class _PartyScreenState extends State<PartyScreen> {
     }
   }
 
-  Future<void> _playYouTubeAudio(String videoUrl) async {
-    try {
-      final yt = YoutubeExplode();
-      final videoId = _extractVideoId(videoUrl);
-
-      if (videoId == null) {
-        print('Invalid YouTube URL');
-        return;
-      }
-
-      final streamManifest = await yt.videos.streamsClient.getManifest(videoId);
-      final audioStream = streamManifest.audio.withHighestBitrate();
-      final streamUrl = audioStream.url.toString();
-
-      await _audioPlayer.setUrl(streamUrl);
-      await _audioPlayer.play();
-    } catch (e) {
-      print('Error playing track: $e');
-    }
-  }
-
-  Future<void> _resumeYouTubeAudio(
-      String videoUrl, Duration currentPosition) async {
-    try {
-      final yt = YoutubeExplode();
-      final videoId = _extractVideoId(videoUrl);
-
-      if (videoId == null) {
-        print('Invalid YouTube URL');
-        return;
-      }
-
-      final streamManifest = await yt.videos.streamsClient.getManifest(videoId);
-      final audioStream = streamManifest.audio.withHighestBitrate();
-      final streamUrl = audioStream.url.toString();
-
-      // Ensure that the YouTube URL is different before setting it again
-      if (_currentTrackUrl != streamUrl) {
-        await _audioPlayer.setUrl(streamUrl);
-        _currentTrackUrl = streamUrl; // Update the current track URL
-      }
-
-      // Seek to the current position if not playing
-      if (_audioPlayer.position != currentPosition) {
-        await _audioPlayer.seek(currentPosition);
-      }
-
-      // Play the YouTube stream
-      await _audioPlayer.play();
-    } catch (e) {
-      print('Error playing YouTube track: $e');
-    }
-  }
-
-  String? _extractVideoId(String url) {
-    final RegExp regExp = RegExp(
-        r'(youtu\.be\/|youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=))([^"&?/\s]{11})');
-    final match = regExp.firstMatch(url);
-    return match?.group(2);
-  }
-
   Future<void> pauseTrack(int index) async {
     final party = Provider.of<PartyStateProvider>(context, listen: false);
     final tracks = party.partyState['tracks'];
@@ -237,13 +157,16 @@ class _PartyScreenState extends State<PartyScreen> {
     Duration currentPosition = _audioPlayer.position;
 
     if (party.isPlaying && index >= 0 && index < tracks.length) {
-      await _audioPlayer.pause(); // Pause the audio playback
+      // Emit pauseTrack event to the server
+      _socketMethods.pauseTrack(party.partyState['id']);
+
       setState(() {
         party.setPlaying(false);
         // Update the playing state in PartyStateProvider
         Provider.of<PartyStateProvider>(context, listen: false)
             .pauseTrack(index);
       });
+
       print(
           "Track paused: ${tracks[index]['title']} at $currentPosition"); // Log the paused track
     } else {
@@ -341,6 +264,7 @@ class _PartyScreenState extends State<PartyScreen> {
 
     // Calculate remaining duration
     final remainingDuration = duration - position;
+    print('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $duration');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -614,3 +538,68 @@ class _PartyScreenState extends State<PartyScreen> {
     super.dispose();
   }
 }
+
+/*bottomNavigationBar: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 40),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.skip_previous, color: Colors.white),
+              iconSize: 40,
+              padding: const EdgeInsets.all(16),
+              onPressed: isHost()
+                  ? previousTrack
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text("Only the host can control playback.")),
+                      );
+                    },
+            ),
+            IconButton(
+              icon: Icon(
+                party.isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+              ),
+              iconSize: 40,
+              padding: const EdgeInsets.all(16),
+              onPressed: isHost()
+                  ? () async {
+                      if (party.isPlaying) {
+                        await pauseTrack(party.currentTrackIndex);
+                      } else {
+                        if (_audioPlayer.position == Duration.zero) {
+                          await playTrack(party.currentTrackIndex);
+                        } else {
+                          await resumeTrack(party.currentTrackIndex);
+                        }
+                      }
+                    }
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text("Only the host can control playback.")),
+                      );
+                    },
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_next, color: Colors.white),
+              iconSize: 40,
+              padding: const EdgeInsets.all(16),
+              onPressed: isHost()
+                  ? nextTrack
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text("Only the host can control playback.")),
+                      );
+                    },
+            ),
+          ],
+        ),
+      ),*/

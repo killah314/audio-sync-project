@@ -8,6 +8,8 @@ const { ObjectId } = mongoose.Types; // Import ObjectId
 const cors = require('cors');
 const axios = require('axios');
 const YOUTUBE_API_KEY = 'AIzaSyCGwZ7Xq26YlJFrwKecLc3XuKmlvGIFRl8'; // Replace with your actual API key
+const ytdl = require('ytdl-core');  // Updated import for YouTube audio extraction
+
 
 // create a server
 const app = express();
@@ -21,16 +23,15 @@ app.use(express.json());
 // connect to mongodb
 const DB = "mongodb+srv://bink:bink123@cluster0.x5jgi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-mongoose.connect(DB).then(() =>{
+mongoose.connect(DB).then(() => {
   console.log("Connected Successful!");
-})
-.catch((e) => {
+}).catch((e) => {
   console.log(e);
 });
 
 // listen to server
 server.listen(port,"0.0.0.0", () =>{
-console.log(`Server started and running on port ${port}`);
+  console.log(`Server started and running on port ${port}`);
 })
 
 // listening to socket.io events
@@ -183,74 +184,59 @@ io.on('connection', (socket) =>{
         }
       });
       
-      
-      
-      
+    // Play track event emitted by party leader or any client
+    socket.on('playTrack', async (data) => {
+      const { partyId, trackIndex } = data;
+      console.log(`Broadcasting playTrack ${trackIndex} to party ${partyId}`);
+      try {
+          let party = await Party.findById(partyId);
+          if (!party) {
+            socket.emit('error', { message: 'Party not found' });
+            return;
+          }
 
-    //timer listener
-    socket.on("timer", async ({playerId, partyId}) =>{
-        let countDown = 5;
-        let party = await Party.findById(partyId);
-        let player = party.players.id(playerId);
+          // Ensure the track exists in the party tracks array
+          const track = party.tracks[trackIndex];
+          console.log(track)
+          if (!track || !track.url) {
+            socket.emit('error', { message: 'Track not found or track URL is missing' });
+            return;
+          }
 
-        if (player.isPartyLeader){
-            let timerId = setInterval(async () => {
-                if(countDown>=0){
-                    io.to(partyId).emit("timer", {
-                    countDown,
-                    msg:"Party Starting",
-                });
-                console.log(countDown);
-                countDown--;
-            }else {
-                party.isJoin = false;
-                party = await party.save();
-                io.to(partyId).emit("updateParty", party);
-                startPartyClock(partyId);
-                clearInterval(timerId);
-            }
-        }, 1000)
-        }
-    });
-    socket.on('playTrack', (data) => {
-      currentTrack = data.url;  // Store the track URL
-      isPlaying = true;
-      io.emit('playTrack', { url: currentTrack });
-    });
-  
-    // When a client emits 'pauseTrack', pause the track
-    socket.on('pauseTrack', () => {
-      isPlaying = false;
-      io.emit('pauseTrack');
-    });
+      // Directly emit the track URL to clients
+      io.to(partyId).emit('playTrack', {
+        trackUrl: track.url,
+        partyId: partyId,
+        trackIndex: trackIndex,
+      });
+  } catch (err) {
+    console.error('Error playing track:', err);
+    socket.emit('error', { message: 'Error playing track' });
+  }
 });
 
-const startPartyClock = async (partyId) => {
-    let party = await Party.findById(partyId);
-    party.startTime = new Date().getTime();
-    party = await party.save();
+    // Pause track event emitted by party leader or any client
+    socket.on('pauseTrack', (data) => {
+      const { partyId } = data;
+      io.to(partyId).emit('pauseTrack', { isPlaying: false });
+  });
 
-    let time = 120;
+    // Next track event
+    socket.on('nextTrack', (data) => {
+      const { partyId, nextTrackIndex } = data;
+      io.to(partyId).emit('nextTrack', { nextTrackIndex });
+  });
 
-    let timerId = setInterval(
-        (function partyIntervalFunc() {
-        if(time >= 0) {
-            const timeFormat = calculateTime(time);
-            io.to(partyId).emit("timer", {
-                countDown: timeFormat,
-                msg: "Time Remaining",
-            });
-            console.log(time);
-            time--;
-        }
-        return partyIntervalFunc;
-    })(),
-    1000
-    );
-};
+    // Previous track event
+    socket.on('previousTrack', (data) => {
+      const { partyId, previousTrackIndex } = data;
+      io.to(partyId).emit('previousTrack', { previousTrackIndex });
+  });
+
+ 
+});
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
 // CORS
 app.post('/upload', async (req, res) => {
   console.log("Body received:", req.body);
@@ -374,4 +360,4 @@ app.get('/party/:partyId/tracks', async (req, res) => {
     res.status(500).send("Error fetching tracks");
   }
 });
-///////////////////////////////////////////////////////////////////////////////////////////////////
+
