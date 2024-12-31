@@ -34,30 +34,28 @@ class _PartyScreenState extends State<PartyScreen> {
     super.initState();
     _socketMethods.updateParty(context);
     _socketMethods.trackAddedListener(context);
-    _socketMethods.trackUpdateListener(context); // Ensure listener is active
+    _socketMethods.trackUpdateListener(context);
+    _socketMethods.playerLeftListener(context); // Add this
 
     party = Provider.of<PartyStateProvider>(context, listen: false);
     findPlayerMe(party!);
 
-    // Add listener for play/pause state changes
     _audioPlayer.playerStateStream.listen((state) {
       setState(() {
-        Provider.of<PartyStateProvider>(context, listen: false).isPlaying = state
-            .playing; // Sync the play/pause state from AudioPlayer to PartyStateProvider
+        Provider.of<PartyStateProvider>(context, listen: false).isPlaying =
+            state.playing;
       });
     });
 
-    // Listen to the audio player's position stream to update the slider position
     _audioPlayer.positionStream.listen((newPosition) {
       setState(() {
         position = newPosition;
       });
-      // Sync the position with the party state
+      // ignore: use_build_context_synchronously
       Provider.of<PartyStateProvider>(context, listen: false)
           .updateTrackPosition(newPosition);
     });
 
-    // Ensure that the duration is set after loading the track
     _audioPlayer.durationStream.listen((newDuration) {
       setState(() {
         duration = newDuration ?? Duration.zero;
@@ -96,7 +94,7 @@ class _PartyScreenState extends State<PartyScreen> {
 
     if (index >= 0 && index < tracks.length) {
       String trackUrl = tracks[index]['url'];
-      String trackTitle = tracks[index]['title']; // Get the track title
+      String trackTitle = tracks[index]['title'];
       String duration = tracks[index]['duration'];
 
       if (trackUrl.isEmpty) {
@@ -104,15 +102,12 @@ class _PartyScreenState extends State<PartyScreen> {
         return;
       }
 
-      // Print both the track title and URL
       print("Playing track: $trackTitle - $trackUrl - $duration");
 
-      // Emit playTrack event to the server
       _socketMethods.playTrack(trackUrl, party.partyState['id'], index);
 
       setState(() {
         party.setPlaying(true);
-        // Update the playing state in PartyStateProvider
         Provider.of<PartyStateProvider>(context, listen: false)
             .playTrack(index);
       });
@@ -125,7 +120,7 @@ class _PartyScreenState extends State<PartyScreen> {
 
     if (index >= 0 && index < tracks.length) {
       String trackUrl = tracks[index]['url'];
-      String trackTitle = tracks[index]['title']; // Get the track title
+      String trackTitle = tracks[index]['title'];
 
       if (trackUrl.isEmpty) {
         print("Track URL is empty!");
@@ -134,16 +129,13 @@ class _PartyScreenState extends State<PartyScreen> {
 
       Duration currentPosition = _audioPlayer.position;
 
-      // Print both the track title and URL
       print("Resuming track: $trackTitle - $trackUrl at $currentPosition");
 
-      // Emit resumeTrack event to the server
       _socketMethods.resumeTrack(
           trackUrl, party.partyState['id'], currentPosition);
 
       setState(() {
         party.setPlaying(true);
-        // Update the playing state in PartyStateProvider
         Provider.of<PartyStateProvider>(context, listen: false)
             .playTrack(index);
       });
@@ -157,39 +149,34 @@ class _PartyScreenState extends State<PartyScreen> {
     Duration currentPosition = _audioPlayer.position;
 
     if (party.isPlaying && index >= 0 && index < tracks.length) {
-      // Emit pauseTrack event to the server
       _socketMethods.pauseTrack(party.partyState['id']);
 
       setState(() {
         party.setPlaying(false);
-        // Update the playing state in PartyStateProvider
         Provider.of<PartyStateProvider>(context, listen: false)
             .pauseTrack(index);
       });
 
-      print(
-          "Track paused: ${tracks[index]['title']} at $currentPosition"); // Log the paused track
+      print("Track paused: ${tracks[index]['title']} at $currentPosition");
     } else {
       print("No track is currently playing or invalid index.");
     }
   }
 
-  // Play next track (circular)
   Future<void> nextTrack() async {
     final party = Provider.of<PartyStateProvider>(context, listen: false);
     final tracks = party.partyState['tracks'];
 
     if (tracks.isNotEmpty) {
-      int nextIndex = ((party.currentTrackIndex + 1) % tracks.length)
-          .toInt(); // Circular list logic
+      int nextIndex = ((party.currentTrackIndex + 1) % tracks.length).toInt();
 
       setState(() {
-        party.setPlaying(true); // Update party state after playing next track
+        party.setPlaying(true);
         Provider.of<PartyStateProvider>(context, listen: false)
             .playTrack(nextIndex);
       });
 
-      await playTrack(nextIndex); // Play the next track
+      await playTrack(nextIndex);
 
       print("Next track playing: ${tracks[nextIndex]['title']}");
     } else {
@@ -197,7 +184,6 @@ class _PartyScreenState extends State<PartyScreen> {
     }
   }
 
-  // Play previous track (circular)
   Future<void> previousTrack() async {
     final party = Provider.of<PartyStateProvider>(context, listen: false);
     final tracks = party.partyState['tracks'];
@@ -205,16 +191,15 @@ class _PartyScreenState extends State<PartyScreen> {
     if (tracks.isNotEmpty) {
       int prevIndex =
           ((party.currentTrackIndex - 1 + tracks.length) % tracks.length)
-              .toInt(); // Circular list logic
+              .toInt();
 
       setState(() {
-        party.setPlaying(
-            true); // Update party state after playing previous track
+        party.setPlaying(true);
         Provider.of<PartyStateProvider>(context, listen: false)
             .playTrack(prevIndex);
       });
 
-      await playTrack(prevIndex); // Play the previous track
+      await playTrack(prevIndex);
 
       print("Previous track playing: ${tracks[prevIndex]['title']}");
     } else {
@@ -227,26 +212,25 @@ class _PartyScreenState extends State<PartyScreen> {
     final isPartyLeader = playerMe['isPartyLeader'];
 
     if (isPartyLeader) {
-      // If the user is the party leader, delete the party from the database and disconnect
-      SocketMethods().deleteParty(
-          party.partyState['id']); // Emit the delete party event to the server
+      SocketMethods().deleteParty(party.partyState['id']);
 
-      // Optionally, show a message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Party has been deleted.")),
       );
     } else {
-      // If the user is not the party leader, simply leave the party
-      SocketMethods().leaveParty(
-          socketID!, party.partyState['id']); // Emit leave party event
+      SocketMethods().leaveParty(socketID!, party.partyState['id']);
 
-      // Optionally, show a message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("You have left the party.")),
       );
     }
 
-    // Navigate back to the home screen after leaving
+    // Update the local party state
+    setState(() {
+      party.partyState['players']
+          .removeWhere((player) => player['socketID'] == socketID);
+    });
+
     Navigator.pushReplacementNamed(context, '/');
   }
 
@@ -256,15 +240,12 @@ class _PartyScreenState extends State<PartyScreen> {
     final tracks = party.partyState['tracks'];
     final currentTrackIndex = party.currentTrackIndex;
 
-    // Get the current track's title
     String trackTitle =
         currentTrackIndex >= 0 && currentTrackIndex < tracks.length
             ? tracks[currentTrackIndex]['title']
             : "No Track Playing";
 
-    // Calculate remaining duration
     final remainingDuration = duration - position;
-    print('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $duration');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -281,8 +262,7 @@ class _PartyScreenState extends State<PartyScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Show the "Add URL" button and "Copy Party Code" input field at the top
-            selectedTab == 1 // If Tracks tab is selected
+            selectedTab == 1
                 ? Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 10),
@@ -294,7 +274,7 @@ class _PartyScreenState extends State<PartyScreen> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            selectedTab == 0 // If Players tab is selected
+            selectedTab == 0
                 ? Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 10),
@@ -329,32 +309,27 @@ class _PartyScreenState extends State<PartyScreen> {
                     ),
                   )
                 : const SizedBox.shrink(),
-
-            // Display the appropriate list based on selected tab
             Expanded(
               child: Column(
                 children: [
                   selectedTab == 0
-                      ? Expanded(
+                      ? const Expanded(
                           child: Column(
                             children: [
-                              // Player list
-                              const Expanded(child: PartyPlayerList()),
+                              Expanded(child: PartyPlayerList()),
                             ],
                           ),
                         )
-                      : Expanded(
+                      : const Expanded(
                           child: Column(
                             children: [
-                              // Track list
-                              const Expanded(child: PartyTrackList()),
+                              Expanded(child: PartyTrackList()),
                             ],
                           ),
                         ),
                 ],
               ),
             ),
-            // Tab buttons for Players and Tracks at the bottom (above audio controls)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: const BoxDecoration(
@@ -366,12 +341,13 @@ class _PartyScreenState extends State<PartyScreen> {
                     child: GestureDetector(
                       onTap: () {
                         setState(() {
-                          selectedTab = 0; // Switch to Players Tab
+                          selectedTab = 0;
                         });
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         color: selectedTab == 0
+                            // ignore: deprecated_member_use
                             ? Colors.white.withOpacity(0.2)
                             : Colors.transparent,
                         child: const Center(
@@ -387,12 +363,13 @@ class _PartyScreenState extends State<PartyScreen> {
                     child: GestureDetector(
                       onTap: () {
                         setState(() {
-                          selectedTab = 1; // Switch to Tracks Tab
+                          selectedTab = 1;
                         });
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         color: selectedTab == 1
+                            // ignore: deprecated_member_use
                             ? Colors.white.withOpacity(0.2)
                             : Colors.transparent,
                         child: const Center(
@@ -417,12 +394,11 @@ class _PartyScreenState extends State<PartyScreen> {
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.fade, // Fading effect for long titles
+                  overflow: TextOverflow.fade,
                 ),
               ),
             ),
-            // Music slider to show the position of the current track
-            Slider(
+            /*Slider(
               value: position.inSeconds.toDouble(),
               min: 0.0,
               max: duration.inSeconds.toDouble(),
@@ -434,7 +410,6 @@ class _PartyScreenState extends State<PartyScreen> {
                 _audioPlayer.seek(position);
               },
             ),
-            // Display the current position and remaining duration below the slider
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Row(
@@ -450,12 +425,10 @@ class _PartyScreenState extends State<PartyScreen> {
                   ),
                 ],
               ),
-            ),
+            ),*/
           ],
         ),
       ),
-
-      // Audio Player Buttons at the Bottom
       bottomNavigationBar: Container(
         color: Colors.black,
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 40),
@@ -524,7 +497,6 @@ class _PartyScreenState extends State<PartyScreen> {
   }
 
   String _formatDuration(Duration duration) {
-    // Format the duration to mm:ss
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
@@ -538,68 +510,3 @@ class _PartyScreenState extends State<PartyScreen> {
     super.dispose();
   }
 }
-
-/*bottomNavigationBar: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 40),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white),
-              iconSize: 40,
-              padding: const EdgeInsets.all(16),
-              onPressed: isHost()
-                  ? previousTrack
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content:
-                                Text("Only the host can control playback.")),
-                      );
-                    },
-            ),
-            IconButton(
-              icon: Icon(
-                party.isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.white,
-              ),
-              iconSize: 40,
-              padding: const EdgeInsets.all(16),
-              onPressed: isHost()
-                  ? () async {
-                      if (party.isPlaying) {
-                        await pauseTrack(party.currentTrackIndex);
-                      } else {
-                        if (_audioPlayer.position == Duration.zero) {
-                          await playTrack(party.currentTrackIndex);
-                        } else {
-                          await resumeTrack(party.currentTrackIndex);
-                        }
-                      }
-                    }
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content:
-                                Text("Only the host can control playback.")),
-                      );
-                    },
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white),
-              iconSize: 40,
-              padding: const EdgeInsets.all(16),
-              onPressed: isHost()
-                  ? nextTrack
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content:
-                                Text("Only the host can control playback.")),
-                      );
-                    },
-            ),
-          ],
-        ),
-      ),*/

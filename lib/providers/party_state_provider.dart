@@ -18,13 +18,11 @@ class PartyStateProvider extends ChangeNotifier {
 
   int get currentTrackIndex => _currentTrackIndex;
   bool get isPlaying => _isPlaying;
-  Duration get currentTrackPosition =>
-      _currentTrackPosition; // Getter for current track position
+  Duration get currentTrackPosition => _currentTrackPosition;
 
-  // Setter for isPlaying
   set isPlaying(bool value) {
     _isPlaying = value;
-    notifyListeners(); // Notify listeners to update the UI when the play/pause state changes
+    notifyListeners();
   }
 
   void updatePartyState({
@@ -44,14 +42,11 @@ class PartyStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Remove track from the local list
   void removeTrack(String trackId) {
-    // Ensure tracks is a list and remove track by trackId
     _partyState.tracks.removeWhere((track) => track['_id'] == trackId);
-    notifyListeners(); // Notify listeners to update the UI
+    notifyListeners();
   }
 
-  // Add a method to remove player from the party state
   void removePlayer(String socketID) {
     partyState['players'] = partyState['players']
         .where((player) => player['socketID'] != socketID)
@@ -59,15 +54,11 @@ class PartyStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add a method to update the party's join status
   void updatePartyJoinStatus(bool status) {
     partyState['isJoin'] = status;
     notifyListeners();
   }
 
-  // Playback Control Methods
-
-  // Play a specific track
   void playTrack(int index) {
     _currentTrackIndex = index;
     _isPlaying = true;
@@ -76,17 +67,15 @@ class PartyStateProvider extends ChangeNotifier {
 
   void setPlaying(bool isPlaying) {
     this.isPlaying = isPlaying;
-    notifyListeners(); // Notify listeners to update the UI
+    notifyListeners();
   }
 
-  // Pause playback
   void pauseTrack(index) {
     _currentTrackIndex = index;
     _isPlaying = false;
     notifyListeners();
   }
 
-  // Play next track (circular)
   void nextTrack() {
     if (_partyState.tracks.isNotEmpty) {
       _currentTrackIndex = (_currentTrackIndex + 1) % _partyState.tracks.length;
@@ -95,7 +84,6 @@ class PartyStateProvider extends ChangeNotifier {
     }
   }
 
-  // Play previous track (circular)
   void previousTrack() {
     if (_partyState.tracks.isNotEmpty) {
       _currentTrackIndex =
@@ -106,7 +94,6 @@ class PartyStateProvider extends ChangeNotifier {
     }
   }
 
-  // Get the current track details
   Map<String, dynamic> get currentTrack {
     if (_partyState.tracks.isNotEmpty) {
       return _partyState.tracks[_currentTrackIndex];
@@ -114,10 +101,9 @@ class PartyStateProvider extends ChangeNotifier {
     return {};
   }
 
-  // Method to update the track position
   void updateTrackPosition(Duration newPosition) {
     _currentTrackPosition = newPosition;
-    notifyListeners(); // Notify listeners about the position change
+    notifyListeners();
   }
 
   void updateTrackState(int trackIndex, bool isPlaying) {
@@ -126,7 +112,6 @@ class PartyStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Method to sync track state across devices (to be triggered by Socket)
   void syncTrackState(int trackIndex, bool isPlaying, Duration position) {
     _currentTrackIndex = trackIndex;
     _isPlaying = isPlaying;
@@ -134,7 +119,6 @@ class PartyStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Method to update the player information in the party state
   void updatePlayerInfo(String socketID, Map<String, dynamic> updatedInfo) {
     int playerIndex = _partyState.players
         .indexWhere((player) => player['socketID'] == socketID);
@@ -142,5 +126,10 @@ class PartyStateProvider extends ChangeNotifier {
       _partyState.players[playerIndex] = updatedInfo;
       notifyListeners();
     }
+  }
+
+  void updatePlayersList(List<dynamic> updatedPlayers) {
+    partyState['players'] = updatedPlayers;
+    notifyListeners();
   }
 }

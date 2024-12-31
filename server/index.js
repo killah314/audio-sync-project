@@ -4,11 +4,11 @@ const http = require("http");
 const mongoose = require("mongoose");
 const Party = require('./models/Party');
 const Track = require('./models/Track'); 
-const { ObjectId } = mongoose.Types; // Import ObjectId
+const { ObjectId } = mongoose.Types; 
 const cors = require('cors');
 const axios = require('axios');
-const YOUTUBE_API_KEY = 'AIzaSyCGwZ7Xq26YlJFrwKecLc3XuKmlvGIFRl8'; // Replace with your actual API key
-const ytdl = require('ytdl-core');  // Updated import for YouTube audio extraction
+const YOUTUBE_API_KEY = 'AIzaSyCGwZ7Xq26YlJFrwKecLc3XuKmlvGIFRl8'; 
+const ytdl = require('ytdl-core'); 
 
 
 // create a server
@@ -71,12 +71,12 @@ io.on('connection', (socket) =>{
                 socket.join(id);
                 party.players.push(player);
                 if (party.players.length >= 3) {
-                  party.isJoin = false; // Set isJoin to false once 3 players have joined
+                  party.isJoin = false; 
               }
                 party = await party.save();
                 io.to(partyId).emit('updateParty', party);
               } else if (party.players.length >= 3) {
-                // If the player count is 3 or more, deny further joins
+ 
                 socket.emit('notCorrectParty', "The party is full, please try again later!");
             } else {
                 socket.emit('notCorrectParty', "The party is in progress, please try again later!");
@@ -88,26 +88,20 @@ io.on('connection', (socket) =>{
 
     socket.on('kick-player', async ({ socketID, partyId }) => {
       try {
-          // Find the party by partyId
           let party = await Party.findById(partyId);
 
-          // Find the player to remove
           let playerIndex = party.players.findIndex((player) => player.socketID === socketID);
           if (playerIndex !== -1) {
-              party.players.splice(playerIndex, 1); // Remove player from the array
+              party.players.splice(playerIndex, 1); 
 
-              // If there are fewer than 3 players, set isJoin to true
               if (party.players.length < 3) {
                   party.isJoin = true;
               }
 
-              // Save the updated party document
               await party.save();
 
-              // Emit the updated party state
               io.to(partyId).emit('updateParty', party);
 
-              // Notify the party leader that the player has been kicked out
               socket.emit('playerKicked', { message: 'Player has been kicked' });
           }
       } catch (error) {
@@ -126,21 +120,17 @@ io.on('connection', (socket) =>{
           let trackIndex = party.tracks.findIndex(
             (track) => track._id.toString() === trackId
           );
-          //console.log(trackId)
 
           if (trackIndex === -1) {
             socket.emit('trackDeleted', { message: 'Track not found' });
             return;
           }
 
-          // Remove track from database
           party.tracks.splice(trackIndex, 1);
           await party.save();
 
-          // Notify all clients about the updated party
           io.to(partyId).emit('updateParty', party);
 
-          // Notify the party leader
           socket.emit('trackDeleted', { message: 'Track removed successfully' });
         } catch (err) {
           console.error('Error deleting track:', err);
@@ -150,7 +140,6 @@ io.on('connection', (socket) =>{
       socket.on('deleteParty', async (data) => {
         const { partyId } = data;
         try {
-          // Delete the party using async/await
           const result = await Party.findByIdAndDelete(partyId);
       
           if (result) {
@@ -167,11 +156,10 @@ io.on('connection', (socket) =>{
       socket.on('leaveParty', async (data) => {
         const { socketID, partyId } = data;
         try {
-          // Update the party and remove the player using async/await
           const result = await Party.findByIdAndUpdate(
             partyId,
             { $pull: { players: { socketID } } },
-            { new: true } // Optionally return the updated party document
+            { new: true } 
           );
       
           if (result) {
@@ -184,7 +172,6 @@ io.on('connection', (socket) =>{
         }
       });
       
-    // Play track event emitted by party leader or any client
     socket.on('playTrack', async (data) => {
       const { partyId, trackIndex } = data;
       console.log(`Broadcasting playTrack ${trackIndex} to party ${partyId}`);
@@ -195,7 +182,6 @@ io.on('connection', (socket) =>{
             return;
           }
 
-          // Ensure the track exists in the party tracks array
           const track = party.tracks[trackIndex];
           console.log(track)
           if (!track || !track.url) {
@@ -203,7 +189,6 @@ io.on('connection', (socket) =>{
             return;
           }
 
-      // Directly emit the track URL to clients
       io.to(partyId).emit('playTrack', {
         trackUrl: track.url,
         partyId: partyId,
@@ -215,19 +200,16 @@ io.on('connection', (socket) =>{
   }
 });
 
-    // Pause track event emitted by party leader or any client
     socket.on('pauseTrack', (data) => {
       const { partyId } = data;
       io.to(partyId).emit('pauseTrack', { isPlaying: false });
   });
 
-    // Next track event
     socket.on('nextTrack', (data) => {
       const { partyId, nextTrackIndex } = data;
       io.to(partyId).emit('nextTrack', { nextTrackIndex });
   });
 
-    // Previous track event
     socket.on('previousTrack', (data) => {
       const { partyId, previousTrackIndex } = data;
       io.to(partyId).emit('previousTrack', { previousTrackIndex });
@@ -243,45 +225,38 @@ app.post('/upload', async (req, res) => {
 
   const { url, partyId } = req.body;
 
-  // Validate input
   if (!url || !partyId) {
     return res.status(400).send('URL and Party ID are required');
   }
 
   try {
-    // Extract the video ID from the URL
     const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
       return res.status(400).send('Invalid YouTube URL');
     }
 
-    // Fetch video details from YouTube API
     const videoDetails = await fetchYouTubeDetails(videoId);
 
     if (!videoDetails) {
       return res.status(500).send('Failed to fetch video details');
     }
 
-    // Destructure the video details
     const { title, duration } = videoDetails;
 
-    // Find the party
     let party = await Party.findById(partyId);
     if (!party) {
       return res.status(404).send("Party not found");
     }
 
-    // Add a new track with fetched title and duration
     const newTrack = {
       title,
       url,
       duration,
     };
 
-    party.tracks.push(newTrack); // Push the track to the party's tracks array
-    await party.save(); // Save the updated party document
+    party.tracks.push(newTrack); 
+    await party.save(); 
 
-    // Emit updated party
     io.to(partyId).emit('updateParty', party);
 
     console.log("Track added with details:", newTrack);
@@ -296,14 +271,12 @@ app.post('/upload', async (req, res) => {
   }
 });
 
-// Utility function to extract YouTube video ID
 function extractYouTubeVideoId(url) {
   const regex = /(?:youtu\.be\/|youtube\.com\/(?:.*[?&]v=|.*\/|embed\/|v\/))([^#&?]*).*/;
   const match = url.match(regex);
   return match && match[1] ? match[1] : null;
 }
 
-// Function to fetch video details using YouTube Data API
 async function fetchYouTubeDetails(videoId) {
   try {
     const response = await axios.get(
@@ -323,7 +296,6 @@ async function fetchYouTubeDetails(videoId) {
   }
 }
 
-// Utility function to parse ISO 8601 duration
 function parseISO8601Duration(duration) {
   const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
   const match = duration.match(regex);
@@ -334,23 +306,19 @@ function parseISO8601Duration(duration) {
 }
 
 
-// API route to get all tracks of a party
 app.get('/party/:partyId/tracks', async (req, res) => {
   const { partyId } = req.params;
 
   try {
-    // Validate the partyId
     if (!ObjectId.isValid(partyId)) {
       return res.status(400).send('Invalid partyId format');
     }
 
-    // Find the party and populate its tracks
     let party = await Party.findById(partyId).populate('tracks');
     if (!party) {
       return res.status(404).send('Party not found');
     }
 
-    // Return the tracks associated with the party
     res.status(200).json({
       message: "Tracks fetched successfully",
       tracks: party.tracks,
